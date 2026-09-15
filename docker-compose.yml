@@ -1,0 +1,22 @@
+services:
+  recommender-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: movie-recommender-api:local
+    ports:
+      - "8000:8000"
+    environment:
+      MOVIE_RECOMMENDER_CONFIG: /app/configs/baseline.yaml
+      PYTHONUNBUFFERED: "1"
+    # Keep deployment configuration and trained artifacts outside the image.
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./models:/app/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
