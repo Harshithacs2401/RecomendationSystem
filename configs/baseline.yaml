@@ -1,0 +1,41 @@
+data:
+  # Supported values: canonical_csv or netflix_prize. See data/raw/README.md.
+  source_format: netflix_prize
+  raw_path: data/raw
+  processed_dir: data/processed
+  validation_fraction: 0.10
+  test_fraction: 0.10
+  rating_min: 1.0
+  rating_max: 5.0
+  netflix_files:
+    - combined_data_1.txt
+    - combined_data_2.txt
+    - combined_data_3.txt
+    - combined_data_4.txt
+seed: 42
+models:
+  popularity:
+    regularization: 20.0
+    min_item_ratings: 2
+  collaborative_filtering:
+    neighborhood_size: 50
+    min_item_ratings: 2
+  matrix_factorization:
+    factors: 40
+    epochs: 20
+    learning_rate: 0.01
+    regularization: 0.05
+  neural_collaborative_filtering:
+    embedding_dim: 32
+    mlp_layers: [64, 32]
+    epochs: 10
+    batch_size: 1024
+    learning_rate: 0.001
+    negative_samples_per_positive: 1
+    implicit_positive_rating: 4.0
+artifacts:
+  model_path: models/recommender_bundle.joblib
+evaluation:
+  recommendation_k: 10
+  relevant_rating_min: 4.0
+  results_dir: models/evaluations
