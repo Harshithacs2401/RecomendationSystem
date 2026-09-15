@@ -1,0 +1,23 @@
+# Version control and local tooling
+.git/
+.gitignore
+.pytest_cache/
+.pytest-tmp/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Historical reference artifacts and notebooks are not part of the API image.
+*.ipynb
+*.pdf
+reg_train.csv
+reg_test.csv
+small_sample_results.csv
+sample_*_sparse_matrix.npz
+movie_titles.csv
+
+# Private/large runtime state is mounted separately by Compose.
+data/
+models/
+tests/
