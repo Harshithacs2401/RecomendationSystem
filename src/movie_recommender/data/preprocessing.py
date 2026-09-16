@@ -3,24 +3,22 @@ import logging
 from pathlib import Path
 import pandas as pd
 
-# REQUIRED_COLUMNS = ("user_id", "item_id", "rating", "timestamp")
-REQUIRED_COLUMNS = ("show_id","type","title","director","cast","country","date_added","release_year","rating","duration","listed_in","description")
+REQUIRED_COLUMNS = ("user_id", "item_id", "rating", "timestamp")
+
 logger = logging.getLogger(__name__)
 
 def _validate(frame: pd.DataFrame, rating_min: float, rating_max: float) -> pd.DataFrame:
-    REQUIRED_COLUMNS = list(frame.columns)
     missing = set(REQUIRED_COLUMNS).difference(frame.columns)
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
     frame = frame.loc[:, REQUIRED_COLUMNS].copy()
-    # frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
-    # frame["rating"] = pd.to_numeric(frame["rating"], errors="coerce")
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    frame["rating"] = pd.to_numeric(frame["rating"], errors="coerce")
     valid = frame.notna().all(axis=1) & frame.rating.between(rating_min, rating_max)
     rejected = int((~valid).sum())
     if rejected:
         logger.warning("Rejected %d invalid interaction records", rejected)
-    # cleaned = frame.loc[valid].drop_duplicates(["user_id", "item_id", "timestamp"], keep="last")
-    cleaned = frame.loc[valid].drop_duplicates(subset = REQUIRED_COLUMNS, keep="last")
+    cleaned = frame.loc[valid].drop_duplicates(["user_id", "item_id", "timestamp"], keep="last")
     if cleaned.empty:
         raise ValueError("No valid interactions remain after validation")
     return cleaned
