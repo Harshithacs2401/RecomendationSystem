@@ -23,8 +23,21 @@ def _validate(frame: pd.DataFrame, rating_min: float, rating_max: float) -> pd.D
         raise ValueError("No valid interactions remain after validation")
     return cleaned
 
+# def load_canonical_csv(path: str | Path, rating_min: float, rating_max: float) -> pd.DataFrame:
+#     return _validate(pd.read_csv(path), rating_min, rating_max)
+
 def load_canonical_csv(path: str | Path, rating_min: float, rating_max: float) -> pd.DataFrame:
-    return _validate(pd.read_csv(path), rating_min, rating_max)
+    frame = pd.read_csv(path)
+
+    # Normalize MovieLens column names to the project's canonical schema.
+    frame = frame.rename(
+        columns={
+            "userId": "user_id",
+            "movieId": "item_id",
+        }
+    )
+
+    return _validate(frame, rating_min, rating_max)
 
 def load_netflix_prize(directory: str | Path, filenames: tuple[str, ...], rating_min: float, rating_max: float) -> pd.DataFrame:
     """Parse Netflix Prize combined files without loading the raw corpus into Python lists."""
