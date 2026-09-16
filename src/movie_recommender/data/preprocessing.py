@@ -30,12 +30,18 @@ def load_canonical_csv(path: str | Path, rating_min: float, rating_max: float) -
     frame = pd.read_csv(path)
 
     # Normalize MovieLens column names to the project's canonical schema.
-    frame = frame.rename(
-        columns={
-            "userId": "user_id",
-            "movieId": "item_id",
-        }
-    )
+    # frame = frame.rename(
+    #     columns={
+    #         "userId": "user_id",
+    #         "movieId": "item_id",
+    #     }
+    # )
+
+    frame = frame.rename(columns={
+        "UserID": "user_id",
+        "MovieID": "item_id",
+        "Rating": "rating"
+    })
 
     return _validate(frame, rating_min, rating_max)
 
