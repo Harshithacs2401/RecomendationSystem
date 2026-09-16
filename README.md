@@ -1,211 +1,145 @@
-# Movie Recommendation System
+Movie Recommendation System
 
-A modular movie recommendation project that demonstrates the path from transparent statistical baselines to embedding-based neural collaborative filtering. Data processing, training, evaluation, inference, and deployment are separate and independently testable.
+A modular movie recommendation system that progresses from statistical baselines to neural collaborative filtering. Data processing, training, evaluation, inference, and deployment are independently testable.
 
-> Status: the software is implemented and tested, but the raw Netflix Prize files are not included here. No model-quality or improvement claim is made until the pipeline is run against a supplied dataset and its held-out comparison tables are reviewed.
+Status: Implemented and tested. Model-quality claims will be made only after running the pipeline on the Netflix Prize dataset and reviewing held-out results.
 
-## Problem statement
+What it does
 
-Given historical movie ratings, rank unseen movies likely to be relevant for each user. The system also supports similar-movie retrieval and handles new users or unknown movies with an explicit popularity fallback.
+Given historical movie ratings, the system:
 
-## Dataset
+Recommends unseen movies for users.
 
-The default configuration targets the historical Netflix Prize combined files:
+Retrieves similar movies.
 
-```text
-movie_id:
-customer_id,rating,YYYY-MM-DD
-```
+Handles new users and unknown movies using popularity fallback.
 
-Place `combined_data_1.txt` through `combined_data_4.txt` in `data/raw/`. These files are intentionally not versioned. The parser rejects malformed rows, missing values, invalid timestamps, and ratings outside the configured range.
+Dataset
 
-Alternatively, set `data.source_format: canonical_csv` and provide:
+Supports:
 
-```text
-user_id,item_id,rating,timestamp
-```
+Netflix Prize: combined_data_1.txt–combined_data_4.txt
 
-Set source type, paths, rating bounds, and split fractions in [configs/baseline.yaml](configs/baseline.yaml). See [data/raw/README.md](data/raw/README.md) for details.
+Canonical CSV: user_id,item_id,rating,timestamp
 
-## Algorithms
+Input data is validated, deduplicated, and split chronologically into train/validation/test sets.
 
-| Model | Role | Cold-start behavior |
-| --- | --- | --- |
-| Smoothed popularity | Non-personalized benchmark and fallback | Ranks eligible items for new users and unknown movies |
-| Item-KNN collaborative filtering | Item-item cosine similarity from ratings | Uses global-mean prediction for unknown entities |
-| Biased matrix factorization | Latent user/item factors trained with SGD | Uses global-mean prediction for unknown entities |
-| NeuMF | Learned user and item embeddings from implicit positives and sampled training negatives | Uses popularity fallback for new users; item embeddings power similar-movie retrieval |
+Models
+Model	Purpose	Cold Start
+Smoothed Popularity	Benchmark & fallback	Popularity ranking
+Item-KNN	Item similarity	Global mean
+Biased Matrix Factorization	Latent-factor baseline	Global mean
+NeuMF	Neural collaborative filtering	Popularity fallback
 
-NeuMF uses interactions at or above the configured `implicit_positive_rating`. Its negatives are sampled only from items absent from a user's **training** history.
+NeuMF learns from positive interactions and sampled negatives that are absent from each user's training history.
 
-## Architecture
+Pipeline
+Raw Data
+   ↓
+Validation & Deduplication
+   ↓
+Chronological Split
+   ↓
+Train Models
+   ↓
+Versioned Model Bundle
+   ↓
+Evaluate
+   ↓
+FastAPI Inference
 
-```mermaid
-flowchart LR
-    Raw[Netflix Prize files or canonical CSV] --> Validate[Validation and deduplication]
-    Validate --> Split[Chronological train / validation / test split]
-    Split --> Train[Train-only model fitting]
-    Train --> Models[Popularity | Item-KNN | MF | NeuMF]
-    Models --> Bundle[Versioned joblib model bundle]
-    Bundle --> Evaluate[Held-out evaluation and comparison CSV]
-    Bundle --> API[FastAPI startup load]
-    API --> Personal[Top-K personalized recommendations]
-    API --> Similar[Similar-movie retrieval]
-    Personal --> Fallback[Popularity fallback]
-    Similar --> Fallback
-```
-
-For component boundaries and scaling considerations, see [docs/architecture.md](docs/architecture.md).
-
-## Project structure
-
-```text
-configs/                  Runtime and model configuration
-data/raw/                 Local source data (not committed)
-data/processed/           Generated chronological splits (not committed)
-models/                   Generated model bundles and evaluation tables (not committed)
-src/movie_recommender/
-  data/                   Ingestion, validation, splitting
-  features/               Train-derived feature helpers
-  models/                 Popularity, KNN, MF, NeuMF implementations
-  evaluation/             Rating/ranking metrics and report persistence
-  inference.py            Recommendation and fallback policy
-  api.py                  FastAPI serving application
-  pipeline.py             Reproducible workflow orchestration
-tests/                    Unit and integration tests
-```
-
-The original notebooks and legacy artifacts remain in the parent workspace as historical reference only. This modular project does not import or depend on them.
-
-## Installation
-
-Requires Python 3.10+; Python 3.12 is used by the Docker image.
-
-```bash
-python -m venv .venv
-```
-
-Activate it:
-
-```bash
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
-
-# macOS/Linux
-source .venv/bin/activate
-```
-
-Install dependencies and the package:
-
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-pip install -e .
-```
-
-NeuMF requires a supported PyTorch runtime. If PyTorch cannot load, the registry logs a warning and excludes NeuMF; traditional models remain usable.
-
-## Training
-
-Workflow commands are configuration-driven; paths and hyperparameters are kept in YAML.
-
-```bash
-# 1. Validate input and create chronological splits.
+Training
 python -m movie_recommender preprocess --config configs/baseline.yaml
-
-# 2. Fit all available models using train.csv only.
 python -m movie_recommender train --config configs/baseline.yaml
-```
 
-Training writes `models/recommender_bundle.joblib` by default. The bundle contains trained models, training interactions needed for seen-item filtering, and the configured random seed. Training does not read validation or test data.
 
-## Evaluation and model comparison
+Creates:
 
-Evaluate the frozen bundle on validation first. Use the test split once after selecting a configuration; do not tune against test results.
+models/recommender_bundle.joblib
 
-```bash
+
+Training uses train.csv only.
+
+Evaluation
 python -m movie_recommender evaluate --config configs/baseline.yaml --split validation
 python -m movie_recommender evaluate --config configs/baseline.yaml --split test
-```
 
-Each command prints a generated comparison table and writes:
 
-```text
-models/evaluations/validation_comparison.csv
-models/evaluations/test_comparison.csv
-```
+Metrics include:
 
-| Metric | Meaning |
-| --- | --- |
-| RMSE | Square-rooted average rating-prediction error; emphasizes large errors |
-| MAE | Average absolute rating-prediction error |
-| Precision@K | Fraction of K displayed items that are held-out relevant items |
-| Recall@K | Fraction of held-out relevant items retrieved in the top K |
-| NDCG@K | Rank-sensitive relevance; relevant items near the top count more |
-| Hit Rate@K | Share of evaluated users receiving at least one relevant top-K item |
+RMSE
 
-Ranking metrics apply to warm users with held-out ratings at or above `relevant_rating_min`. Hold-out labels are never used to fit or rank models.
+MAE
 
-## Inference API
+Precision@K
 
-Start the API after training produces a bundle:
+Recall@K
 
-```bash
+NDCG@K
+
+Hit Rate@K
+
+Validation is used for model/configuration selection; the test set is used once for final evaluation.
+
+API
 uvicorn movie_recommender.api:app --host 0.0.0.0 --port 8000
-```
 
-Interactive documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-```bash
-curl http://localhost:8000/health
-curl "http://localhost:8000/v1/users/123/recommendations?k=10"
-curl "http://localhost:8000/v1/movies/42/similar?k=10"
-```
+Example endpoints:
 
-The API loads a pre-trained bundle once at startup. It never preprocesses data, updates features, or retrains a model on a request.
+GET /health
+GET /v1/users/{user_id}/recommendations?k=10
+GET /v1/movies/{movie_id}/similar?k=10
 
-## Deployment
 
-The Docker image is CPU-oriented and inference-only. Configuration and model artifacts are runtime mounts, not image layers.
+The API loads the frozen model bundle at startup and never trains or preprocesses data during requests.
 
-```bash
+Deployment
 docker compose up --build
-```
 
-This exposes port 8000 and mounts `./configs` and `./models` read-only. See [Dockerfile](Dockerfile) and [docker-compose.yml](docker-compose.yml) for the runtime contract.
 
-## Final model and serving policy
+The CPU-oriented Docker deployment mounts configuration and model artifacts at runtime.
 
-No model has been selected as "best" because no real held-out comparison artifact exists yet. The current serving policy is:
+Serving Policy
 
-1. Use NeuMF for a known user when it is present and returns candidates.
-2. Use embedding cosine similarity for a known movie when NeuMF is available.
-3. Use popularity for new users, unknown movies, unavailable NeuMF, or an empty personalized candidate set.
+Current policy:
 
-Before designating a final model, compare generated validation metrics, inspect segment behavior, lock the configuration, and run the test split once.
+Known user + NeuMF → personalized recommendations.
 
-## Limitations
+Known movie + NeuMF → embedding-based similar movies.
 
-- Offline rating data only; no real-time views, clicks, skips, availability, or exposure logs.
-- Item-KNN is a clarity-first baseline, not a full-scale Netflix implementation without sparse/ANN optimization.
-- NeuMF uses thresholded positives and uniform negative sampling, not exposure-aware negatives.
-- Catalog metadata such as genre, cast, language, availability, and synopsis are unused.
-- No experiment platform, model registry, feature store, monitoring, authentication, rate limiting, or privacy/retention policy.
-- API responses contain item IDs and scores; title joins and catalog availability belong in an integration layer.
+Otherwise → popularity fallback.
 
-## Future improvements
+No model is currently designated as the final/best model because real held-out comparison results have not yet been generated.
 
-- Add sparse/ANN candidate retrieval and batched neural scoring.
-- Add catalog/content embeddings and a hybrid ranker for new items.
-- Use per-user temporal evaluation and exposure-aware negatives.
-- Introduce model versioning, experiment tracking, data contracts, and drift monitoring.
-- Add authentication, rate limiting, tracing, and operational dashboards.
-- Measure diversity, novelty, coverage, calibration, fairness, and latency alongside relevance.
+Limitations
 
-## Verification
+No real-time behavioral or exposure data.
 
-```bash
+No catalog metadata/content features.
+
+KNN is a clarity-first implementation.
+
+NeuMF uses uniform negative sampling.
+
+No authentication, monitoring, experiment tracking, or model registry.
+
+Future Work
+
+ANN/sparse candidate retrieval.
+
+Content + collaborative hybrid models.
+
+Exposure-aware negatives and temporal evaluation.
+
+Experiment tracking and model versioning.
+
+Monitoring, authentication, rate limiting, and observability.
+
+Diversity, novelty, coverage, fairness, and latency evaluation.
+
+Verification
 pytest
-```
 
-Tests cover preprocessing, deterministic workflows, evaluation reporting, cold-start behavior, API startup from a frozen bundle, and API input validation.
+
+Tests cover preprocessing, deterministic workflows, evaluation, cold-start behavior, API startup, and input validation.
